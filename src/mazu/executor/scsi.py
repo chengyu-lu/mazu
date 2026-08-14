@@ -7,7 +7,7 @@ the host's point of view.
 
 from __future__ import annotations
 
-from ..core.command import CommandResult, LogicalCommand
+from ..core.command import CommandResult, ProtocolCommand
 from .base import Executor
 
 
@@ -26,5 +26,5 @@ class ScsiExecutor(Executor):
     def close(self) -> None:  # pragma: no cover
         raise NotImplementedError
 
-    def execute(self, command: LogicalCommand) -> CommandResult:  # pragma: no cover
+    def execute(self, command: ProtocolCommand) -> CommandResult:  # pragma: no cover
         raise NotImplementedError

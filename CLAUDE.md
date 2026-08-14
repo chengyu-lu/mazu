@@ -2,7 +2,7 @@
 
 Mazu — 專為 SSD / USB / USB4 控制器韌體工程師設計的儲存驗證與除錯框架。
 目標 pipeline:自然語言 → Flow IR → 驗證 → 裝置執行 → 結果解碼 → 分析。
-完整設計請先讀 `docs/architecture.md`。
+完整設計請先讀 `docs/architecture.md`;Flow DSL 規格在 `docs/flow-dsl.md`。
 
 **這不是一般軟體專案。** 這個框架產生的指令會直接打進儲存裝置的韌體;
 一個編錯的欄位可能毀掉資料、bricked 裝置,或讓工程師對著假象 debug 好幾天。
@@ -19,7 +19,7 @@ Mazu — 專為 SSD / USB / USB4 控制器韌體工程師設計的儲存驗證�
 
 2. **NVMe、SCSI、USB 的協議語意必須明確定義。**
    每個 LogicalCommand 在每個協議上的映射、參數語意、錯誤語意,
-   都必須寫進 `translate/sntl.py` 的 `LOGICAL_MAPPING`(它是語意的
+   都必須寫進 `translate/sntl.py` 的 `COMMAND_MAPPING`(它是語意的
    single source of truth)。新增邏輯指令時,若某協議上的語意
    無法明確定義,就明確標記為該協議 UNSUPPORTED,不留模糊地帶。
 
@@ -89,21 +89,25 @@ Mazu — 專為 SSD / USB / USB4 控制器韌體工程師設計的儲存驗證�
 pip install -e ".[dev]"                                # 安裝(開發模式)
 pytest                                                 # mock 測試(必須全綠才能 commit)
 pytest -m hw                                           # 實機測試(Phase 2 起,需硬體)
-mazu validate examples/flows/identify_and_smart.yaml   # 只驗證流程
-mazu run examples/flows/identify_and_smart.yaml        # 在 MockExecutor 上執行
-mazu run <flow.yaml> -e mock --json                    # 選 executor、JSON 報告
+mazu validate examples/flows/nvme_health.yaml          # 只驗證流程
+mazu run examples/flows/nvme_health.yaml               # 在 MockExecutor 上執行
+mazu run <flow.yaml> --dry-run                         # 試運行:只出指令計畫,不碰裝置
+mazu run <flow.yaml> --trace                           # 文字報告附指令 trace
+mazu run <flow.yaml> --json                            # JSON 報告(永遠含 trace)
 ```
 
 ## 架構與依賴方向
 
 ```
 src/mazu/
-├── core/       # command.py(LogicalCommand/Op/Status)、flow.py(IR 解析
-│               # 與序列化)、validate.py(語意驗證)、engine.py(確定性
-│               # flow 引擎)、result.py(含 raw 證據的可序列化結果)
+├── core/       # command.py(ProtocolCommand/Status)、registry.py(指令集
+│               # 唯一真相:typed params + effect + spec 出處)、flow.py
+│               # (DSL v2 解析與序列化,規格=docs/flow-dsl.md)、validate.py
+│               # (語意驗證)、engine.py(確定性引擎:depends_on 閘門、
+│               # dry-run、trace)、result.py(含 raw 證據與 trace 的結果)
 ├── executor/   # base.py(Executor ABC = 唯一通往裝置的門)、mock/(可用)、
 │               # nvme.py / scsi.py / usb4.py(Phase 2/3 stub,勿刪介面說明)
-├── translate/  # base.py(Translator ABC)、sntl.py(LOGICAL_MAPPING = 語意真相)
+├── translate/  # base.py(Translator ABC)、sntl.py(COMMAND_MAPPING = 語意真相)
 ├── decode/     # bytes → 結構化 dict;以邏輯 op 為 key,不以 executor 為 key
 ├── analyze/    # report.py(text/JSON 報告,從結構化資料生成)
 └── cli.py      # mazu validate / run
@@ -127,17 +131,20 @@ Executor 對無法表達的指令回 `Status.UNSUPPORTED`,絕不默默替換。
 **現在不要做**:NL/LLM 整合、完整 SNTL 覆蓋、廠商指令、GUI/Web、
 分散式執行、Windows 支援、效能測試(Mazu 是功能驗證工具,不是 benchmark)。
 
-## 新增一個邏輯指令的標準流程(缺一不可)
+## 新增一個指令的標準流程(缺一不可)
 
-1. `core/command.py`:加 Op;會改變裝置狀態就同時加入 `DESTRUCTIVE_OPS`
-   (v1 的 validator 會因此一律拒絕它 — 這是預期行為,不是 bug)。
-2. `translate/sntl.py`:在 `LOGICAL_MAPPING` 定義它在 NVMe 與 SCSI 上的
-   語意映射(含 spec 出處);某協議無對應就明確標 UNSUPPORTED。
-3. `core/validate.py`:參數驗證(必要參數、範圍、危險性)。
-4. 各 executor 的 dispatch(mock 先行,payload 依 spec offset)。
-5. 需要時加 decoder(`decode/`,回傳 snake_case 巢狀 dict)。
-6. 測試:codec roundtrip 測試 + validator 測試 + mock pipeline 測試。
-7. 範例 flow(`examples/flows/`,必須在 MockExecutor 上 PASS)。
+1. `core/registry.py`:加 `CommandSpec`(協議、型別化參數、effect 分類、
+   spec 出處)。destructive 的指令在 v1 會被 validator 一律拒絕 —
+   這是預期行為,不是 bug。
+2. `translate/sntl.py`:若跨協議有語意對應,寫進 `COMMAND_MAPPING`
+   (含 spec 出處);無對應就明確標 None。
+3. 各 executor 的 dispatch(mock 先行,payload 依 spec offset)。
+4. 需要時加 decoder(`decode/`,以 (protocol, command) 為 key,
+   回傳 snake_case 巢狀 dict)。
+5. 測試:codec roundtrip 測試 + validator 測試(typed params)+
+   mock pipeline 測試。
+6. 範例 flow(`examples/flows/`,必須在 MockExecutor 上 PASS)。
+7. 更新 `docs/flow-dsl.md` 的指令表。
 
 Commit 前:`pytest` 全綠 + 兩個 example flow `mazu run` 都 PASS。
 

@@ -1,27 +1,37 @@
-# Example flow: identify the device and check its health.
-# Runs on any transport — the same file will work on real NVMe, SCSI,
-# USB or USB4 devices once those transports land.
-version: 1
-name: identify_and_smart
+# NVMe health check with explicit dependencies: identify first, then
+# namespace and SMART checks gated on it. DSL v2, read-only.
+version: 2
+name: nvme_health
 description: Identify controller/namespace and verify basic SMART health.
 
+targets:
+  - id: ssd0
+    protocol: nvme
+    executor: mock
+    device: "mock://nvme/0"
+
 steps:
-  - name: identify controller
-    op: identify_controller
+  - name: id_ctrl
+    target: ssd0
+    command: identify_controller
     assert:
       - { path: identify.model, op: exists }
       - { path: identify.num_namespaces, op: ge, value: 1 }
 
-  - name: identify namespace 1
-    op: identify_namespace
+  - name: id_ns1
+    target: ssd0
+    command: identify_namespace
     params: { nsid: 1 }
+    depends_on: [id_ctrl]
     assert:
       - { path: namespace.lba_size, op: eq, value: 512 }
       - { path: namespace.size_blocks, op: gt, value: 0 }
 
-  - name: check SMART health
-    op: get_log
-    params: { log: smart }
+  - name: smart
+    target: ssd0
+    command: get_log_page
+    params: { lid: smart }
+    depends_on: [id_ctrl]
     assert:
       - { path: smart.critical_warning, op: eq, value: 0 }
       - { path: smart.media_errors, op: eq, value: 0 }

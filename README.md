@@ -14,7 +14,8 @@ Mazu 提供一個統一的指令抽象層,讓同一套驗證流程可以透過�
  自然語言 (之後實作)
      │  NL frontend 產生 Flow IR — LLM 只負責「翻譯成 IR」,不直接碰裝置
      ▼
- Flow IR (YAML/JSON)          ← 人可讀、可 diff、可版本控制的流程描述
+ Flow DSL v2 (YAML)           ← 協議明確、目標明確、指令明確、參數型別化
+     │                           (規格:docs/flow-dsl.md)
      │
      ▼
  Validator                    ← schema + 語意驗證(參數範圍、相依性、危險指令)
@@ -40,11 +41,15 @@ Mazu 提供一個統一的指令抽象層,讓同一套驗證流程可以透過�
 ```bash
 pip install -e ".[dev]"
 
-# 用模擬裝置跑一個範例流程
-mazu run examples/flows/identify_and_smart.yaml
+# 用模擬裝置跑範例流程(NVMe 與 SCSI)
+mazu run examples/flows/nvme_health.yaml
+mazu run examples/flows/scsi_capacity_check.yaml --trace
+
+# 試運行:驗證 + 依賴解析 + 指令計畫,不碰裝置
+mazu run examples/flows/nvme_health.yaml --dry-run
 
 # 只做驗證,不執行
-mazu validate examples/flows/identify_and_smart.yaml
+mazu validate examples/flows/nvme_health.yaml
 
 # 跑測試
 pytest
@@ -54,11 +59,11 @@ pytest
 
 | 元件 | 狀態 |
 |---|---|
-| Flow IR + 驗證 | ✅ 可用 |
-| 邏輯指令抽象層 | ✅ 可用 |
-| Mock NVMe 裝置 / MockExecutor | ✅ 可用 |
-| 確定性 Flow 引擎 + assertion | ✅ 可用 |
-| Decoder(Identify / SMART) | ✅ 基本可用 |
+| Flow DSL v2(typed params、深度驗證)| ✅ 可用 |
+| 指令註冊表(NVMe + SCSI,spec 出處)| ✅ 可用 |
+| Mock NVMe + SCSI 裝置 / MockExecutor | ✅ 可用 |
+| 確定性引擎(depends_on、dry-run、trace)| ✅ 可用 |
+| Decoder(Identify/SMART/INQUIRY/CAPACITY)| ✅ 基本可用 |
 | Linux 真實 NVMe/SCSI executor | 🔜 Phase 2 |
 | USB4 隧道與 NVMe↔SCSI 翻譯 | 🔜 Phase 3(介面已預留) |
 | 自然語言 → Flow IR | 🔜 IR 穩定後實作 |

@@ -1,6 +1,6 @@
 """Executor interface — the only gate to a device (invariant I4).
 
-An Executor takes LogicalCommands and returns CommandResults. How a command
+An Executor takes ProtocolCommands and returns CommandResults. How a command
 is expressed on the wire (NVMe SQE, SCSI CDB, tunneled through USB4) is
 entirely the executor's business. If an executor cannot express a command,
 it returns Status.UNSUPPORTED — it never guesses.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from ..core.command import CommandResult, LogicalCommand
+from ..core.command import CommandResult, ProtocolCommand
 
 
 class Executor(ABC):
@@ -33,7 +33,7 @@ class Executor(ABC):
         """Release the device."""
 
     @abstractmethod
-    def execute(self, command: LogicalCommand) -> CommandResult:
+    def execute(self, command: ProtocolCommand) -> CommandResult:
         """Execute one logical command synchronously."""
 
     def __enter__(self) -> "Executor":

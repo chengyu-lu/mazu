@@ -16,7 +16,8 @@
 
 ### I1. 指令定義必須是結構化的
 
-指令是型別化的資料物件(`LogicalCommand`:封閉的 `Op` 枚舉 + 具名參數),
+指令是型別化的資料物件(`ProtocolCommand`:明確的協議 + 指令註冊表中的
+指令名 + 型別化參數;registry 見 `core/registry.py` 與 docs/flow-dsl.md),
 不是字串、不是自由格式文字。任何一層之間都不傳遞「描述指令的文字」;
 LLM 的自然語言輸出在進入系統的那一刻就被結構化為 IR,之後不再有文字解析。
 
@@ -109,20 +110,25 @@ v2 引入破壞性指令時,採雙重閘門:flow 層級明確 `allow_destructive
 - **安全**:所有要送進裝置的東西都經過同一個 validator,
   LLM 幻覺最多產生一份會被拒絕的 YAML,不會變成 ioctl。
 - **可重現**:IR 可存檔、diff、review、進 CI;除錯時完全重播。
+  dry-run 產生與實跑完全一致的指令計畫。
 - **可測試**:pipeline 每一段都能獨立測試,不需要 LLM 也不需要硬體。
-- **傳輸無關**:流程寫邏輯操作,協議差異(含 USB4 的 NVMe↔SCSI 切換)
-  由 executor 與翻譯層處理,流程檔不因 transport 而異。
+- **協議明確、傳輸彈性**(DSL v2):流程對協議與目標裝置是明確的;
+  同協議指令可走不同傳輸隧道(NVMe over PCIe / over USB4),
+  **跨協議**執行(USB4 SCSI-only 鏈路上跑 NVMe 指令)是 translate/
+  的明確、逐指令翻譯,不是隱式抽象。
 
-邏輯指令與各協議的對應(語意真相在 `translate/sntl.py` 的 `LOGICAL_MAPPING`):
+**DSL v2(規格見 `docs/flow-dsl.md`)之後,指令是協議明確的**:
+指令集定義於 `core/registry.py`(typed params + effect 分類 + spec 出處)。
+跨協議的語意對應(語意真相在 `translate/sntl.py` 的 `COMMAND_MAPPING`):
 
-| LogicalCommand | NVMe | SCSI |
+| NVMe 指令 | SCSI 對應 | 備註 |
 |---|---|---|
-| identify_controller | Identify (CNS=01h) | INQUIRY + VPD |
-| identify_namespace | Identify (CNS=00h) | READ CAPACITY(16) |
-| read | Read (01h) | READ(10)/(16) |
-| get_log(smart) | Get Log Page (02h) | LOG SENSE / Informational Exceptions |
-| flush | Flush (00h) | SYNCHRONIZE CACHE(10) |
-| write(v2) | Write (02h) | WRITE(10)/(16) |
+| identify_controller(Identify CNS=01h) | inquiry(12h + VPD) | |
+| identify_namespace(Identify CNS=00h) | read_capacity_16(9Eh/10h) | |
+| read(opcode 02h) | read_16(88h) | |
+| write(opcode 01h) | write_16(8Ah) | destructive,v2 |
+| get_log_page(02h) | —(LOG SENSE 4Dh 部分對應) | |
+| flush(00h) | —(SYNCHRONIZE CACHE 35h,未映射) | |
 
 ## 5. 實作順序
 

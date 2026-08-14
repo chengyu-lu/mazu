@@ -1,0 +1,38 @@
+# SCSI read-only sanity flow with a cross-step assertion: read LBA 0 and
+# verify the returned length equals the block size reported by
+# READ CAPACITY(16). DSL v2.
+version: 2
+name: scsi_capacity_check
+description: INQUIRY, capacity, then read LBA 0 and cross-check block size.
+
+targets:
+  - id: disk0
+    protocol: scsi
+    executor: mock
+    device: "mock://scsi/0"
+
+steps:
+  - name: inq
+    target: disk0
+    command: inquiry
+    assert:
+      - { path: inquiry.vendor, op: exists }
+      - { path: inquiry.peripheral_device_type, op: eq, value: 0 }
+
+  - name: read_cap
+    target: disk0
+    command: read_capacity_16
+    depends_on: [inq]
+    assert:
+      - { path: capacity.block_size, op: eq, value: 512 }
+      - { path: capacity.total_blocks, op: gt, value: 0 }
+
+  - name: read_lba0
+    target: disk0
+    command: read_16
+    params: { lba: 0, transfer_length: 1 }
+    depends_on: [read_cap]
+    assert:
+      - path: length
+        op: eq
+        value_from: { step: read_cap, path: capacity.block_size }

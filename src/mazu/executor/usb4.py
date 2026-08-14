@@ -4,17 +4,17 @@ A USB4-attached device may expose NVMe (tunneled PCIe) or SCSI (UAS/BOT)
 depending on enclosure/bridge mode. This executor will:
 
 1. detect which protocol the tunnel currently exposes,
-2. route LogicalCommands through the matching wire encoding,
+2. route ProtocolCommands through the matching wire encoding,
 3. use mazu.translate (SNTL subset) for raw commands issued in the
    *other* protocol, refusing loudly when no faithful translation exists.
 
 Flows never change: protocol switching happens entirely below the
-LogicalCommand abstraction.
+ProtocolCommand abstraction.
 """
 
 from __future__ import annotations
 
-from ..core.command import CommandResult, LogicalCommand
+from ..core.command import CommandResult, ProtocolCommand
 from .base import Executor
 
 
@@ -34,5 +34,5 @@ class Usb4Executor(Executor):
     def close(self) -> None:  # pragma: no cover
         raise NotImplementedError
 
-    def execute(self, command: LogicalCommand) -> CommandResult:  # pragma: no cover
+    def execute(self, command: ProtocolCommand) -> CommandResult:  # pragma: no cover
         raise NotImplementedError
