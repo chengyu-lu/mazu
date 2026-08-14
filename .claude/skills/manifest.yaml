@@ -1,0 +1,96 @@
+# Mazu domain-skill manifest — routing & ownership document.
+# This file maps protocol layers to owning skills, records boundaries and
+# cross-skill handoffs. It is NOT an execution engine and carries no
+# runtime behavior. Runtime is: Validator -> Engine -> Executor/MCP.
+
+version: 1
+
+skills:
+  usb:
+    status: foundation          # SKILL.md created; deep content in a later phase
+    owns:
+      - usb.link                # 2.0 signaling states, 3.x LTSSM as trace context
+      - usb.enum                # device states, reset, address, configuration
+      - usb.descriptor
+      - usb.transfer            # control / bulk / interrupt / isochronous
+      - usb.power               # suspend/resume, U-states
+      - msc.bot
+      - msc.uas
+      - scsi.cdb                # embedded SCSI boundary (see extraction_criterion)
+    responsibilities: >
+      USB 2.0/3.x device framework, MSC transports (BOT/UAS), SCSI-over-USB
+      boundary, enumeration/descriptor/transfer/error analysis, USB trace
+      analysis.
+    boundaries:
+      - usb != scsi             # transport semantics vs command semantics
+      - usb3.x != usb4          # SuperSpeed is not USB4
+    handoffs:
+      - to: usb4
+        when: >
+          the USB link rides a USB4 USB3-tunnel and a fabric-level fault is
+          suspected
+    extraction_criterion: >
+      If the project requires substantial independent SCSI analysis (SPC/SBC
+      depth, sense taxonomy, mode pages, VPD, persistent reservations, ALUA,
+      task management beyond UAS TMF basics), scsi.cdb is extracted into a
+      dedicated scsi skill; usb then retains only the transport mapping.
+
+  usb4:
+    status: foundation          # SKILL.md created; deep content in a later phase
+    owns:
+      - usb4.link               # lanes, bonding, generations
+      - usb4.router             # host/device routers, adapters, config space
+      - usb4.path
+      - usb4.tunnel             # usb3 / pcie / dp tunnel state & bandwidth
+      - usb4.cm                 # connection manager behavior
+    responsibilities: >
+      Fabric health: topology, routers/adapters/paths, tunnel establishment,
+      bandwidth, CM flows, fabric-level trace analysis, and handoff verdicts
+      ("fabric healthy / fabric fault / undetermined + discriminating test").
+    boundaries:
+      - usb4 != usb             # tunneled USB keeps USB semantics (usb skill)
+      - usb4 != usb-pd          # PD negotiates mode entry, then out of scope
+      - usb4 != type-c          # connector/cable layer
+      - usb4 != tbt3            # compatibility mode is a distinct configuration
+    handoffs:
+      - to: usb
+        when: "fabric healthy; symptoms are inside a USB3 tunnel"
+      - to: nvme
+        when: "fabric healthy; symptoms are inside a PCIe tunnel (NVMe device)"
+
+  nvme:
+    status: active              # first deeply developed skill
+    owns:
+      - nvme.init               # controller initialization sequence, CC/CSTS
+      - nvme.queue              # SQ/CQ, doorbells, phase bit, state reconstruction
+      - nvme.command            # SQE/CQE, Admin + NVM command semantics
+      - nvme.log
+      - nvme.feature
+      - nvme.status             # SCT/SC, aborts, timeouts, AEN
+      - nvme.reset              # cc-en-reset / nssr / flr — distinct mechanisms
+      - pcie.transport          # NVMe-relevant PCIe surface only (boundary layer)
+    responsibilities: >
+      NVMe semantics end-to-end: command-flow reasoning and Flow DSL
+      generation, queue-state reasoning, SQE/CQE and status decoding,
+      timeout/reset analysis, Identify/log/feature analysis, trace and
+      firmware-log correlation, test generation, registry proposals,
+      structured evidence for the local analysis model.
+    boundaries:
+      - nvme != pcie            # command semantics vs transport semantics
+    handoffs:
+      - to: usb4
+        when: >
+          the PCIe link is USB4-tunneled and a fabric-level fault is
+          suspected
+
+layer_rules:
+  - every important claim is tagged with exactly one owned layer
+  - a deviation is attributed to one layer, or explicitly marked ambiguous
+    together with the discriminating test that would resolve it
+  - forbidden_equivalences:
+      - [usb4, usb]
+      - [usb4, usb-pd]
+      - [usb4, type-c]
+      - [usb4, tbt3]
+      - [usb, scsi]
+      - [nvme, pcie]
