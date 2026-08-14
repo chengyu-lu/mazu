@@ -1,8 +1,8 @@
 """mazu command-line interface.
 
     mazu validate <flow.yaml>          # parse + semantic validation only
-    mazu run <flow.yaml> [--json]      # validate then execute (mock transport)
-    mazu run <flow.yaml> -t mock       # transport selection (more in Phase 2)
+    mazu run <flow.yaml> [--json]      # validate then execute (mock executor)
+    mazu run <flow.yaml> -e mock       # executor selection (more in Phase 2)
 """
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ import argparse
 import sys
 
 from .analyze.report import json_report, text_report
-from .core.executor import FlowExecutionError, run_flow
+from .core.engine import FlowExecutionError, run_flow
 from .core.flow import FlowParseError, load_flow
 from .core.validate import validate_flow
-from .transport.mock.transport import MockTransport
+from .executor.mock.executor import MockExecutor
 
-TRANSPORTS = {
-    "mock": lambda args: MockTransport(),
+EXECUTORS = {
+    "mock": lambda args: MockExecutor(),
     # "nvme": Phase 2, "scsi": Phase 2, "usb4": Phase 3
 }
 
@@ -46,9 +46,9 @@ def cmd_validate(args) -> int:
 
 def cmd_run(args) -> int:
     flow = _load(args.flow)
-    transport = TRANSPORTS[args.transport](args)
+    executor = EXECUTORS[args.executor](args)
     try:
-        result = run_flow(flow, transport)
+        result = run_flow(flow, executor)
     except FlowExecutionError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> None:
 
     p_run = sub.add_parser("run", help="validate and execute a flow file")
     p_run.add_argument("flow")
-    p_run.add_argument("-t", "--transport", choices=sorted(TRANSPORTS), default="mock")
+    p_run.add_argument("-e", "--executor", choices=sorted(EXECUTORS), default="mock")
     p_run.add_argument("--json", action="store_true", help="emit JSON report")
     p_run.set_defaults(func=cmd_run)
 

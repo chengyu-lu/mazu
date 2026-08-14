@@ -20,11 +20,11 @@ Mazu 提供一個統一的指令抽象層,讓同一套驗證流程可以透過�
  Validator                    ← schema + 語意驗證(參數範圍、相依性、危險指令)
      │
      ▼
- Executor ── LogicalCommand ─→ Transport 抽象層
-     │                            ├─ MockTransport(模擬 NVMe 裝置,現已可用)
-     │                            ├─ NvmeTransport(Linux ioctl passthru,規劃中)
-     │                            ├─ ScsiTransport(SG_IO,規劃中)
-     │                            └─ Usb4Transport(隧道 + 協議翻譯,規劃中)
+ Flow 引擎 ─ LogicalCommand ─→ Executor 介面(唯一通往裝置的門)
+     │                            ├─ MockExecutor(模擬 NVMe 裝置,現已可用)
+     │                            ├─ NvmeExecutor(Linux ioctl passthru,規劃中)
+     │                            ├─ ScsiExecutor(SG_IO,規劃中)
+     │                            └─ Usb4Executor(隧道 + 協議翻譯,規劃中)
      │                                  └─ translate/:NVMe ↔ SCSI 翻譯層 (SNTL)
      ▼
  Decoder                      ← raw bytes → 結構化資料(Identify、SMART、sense…)
@@ -56,10 +56,10 @@ pytest
 |---|---|
 | Flow IR + 驗證 | ✅ 可用 |
 | 邏輯指令抽象層 | ✅ 可用 |
-| Mock NVMe 裝置 / transport | ✅ 可用 |
-| Executor + assertion | ✅ 可用 |
+| Mock NVMe 裝置 / MockExecutor | ✅ 可用 |
+| 確定性 Flow 引擎 + assertion | ✅ 可用 |
 | Decoder(Identify / SMART) | ✅ 基本可用 |
-| Linux 真實 NVMe/SCSI transport | 🔜 Phase 2 |
+| Linux 真實 NVMe/SCSI executor | 🔜 Phase 2 |
 | USB4 隧道與 NVMe↔SCSI 翻譯 | 🔜 Phase 3(介面已預留) |
 | 自然語言 → Flow IR | 🔜 IR 穩定後實作 |
 | 廠商專屬指令 | ⏸ 之後透過 plugin 機制支援 |

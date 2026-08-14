@@ -1,4 +1,9 @@
-"""Mock transport: maps LogicalCommands onto the simulated NVMe device."""
+"""MockExecutor: maps LogicalCommands onto the simulated NVMe device.
+
+Per invariant I5, this is the first first-class Executor implementation,
+not a testing stand-in: payloads are spec-shaped, so the decode layer
+treats mock and real hardware identically.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +14,7 @@ from ...core.command import (
     Op,
     Status,
 )
-from ..base import Transport
+from ..base import Executor
 from .device import MockNvmeDevice
 
 
@@ -17,7 +22,7 @@ def _make_pattern(pattern: int, length: int) -> bytes:
     return bytes([pattern & 0xFF]) * length
 
 
-class MockTransport(Transport):
+class MockExecutor(Executor):
     name = "mock"
 
     def __init__(self, device: MockNvmeDevice | None = None):
@@ -33,7 +38,7 @@ class MockTransport(Transport):
     def execute(self, command: LogicalCommand) -> CommandResult:
         if not self._open:
             return CommandResult(command, Status.TRANSPORT_ERROR,
-                                 raw_status={"reason": "transport not open"})
+                                 raw_status={"reason": "executor not open"})
         try:
             return self._dispatch(command)
         except ValueError as e:
@@ -57,6 +62,9 @@ class MockTransport(Transport):
                                  data=dev.read(p["lba"], p["blocks"]))
 
         if op is Op.WRITE:
+            # Unreachable in v1: the validator rejects DESTRUCTIVE_OPS
+            # unconditionally (invariant I7). Kept so the executor shape is
+            # complete for the v2 double-gate milestone.
             length = p["blocks"] * dev.lba_size
             data = _make_pattern(p.get("pattern", 0), length)
             dev.write(p["lba"], p["blocks"], data)
@@ -79,6 +87,6 @@ class MockTransport(Transport):
                                                  "known": sorted(LOG_PAGES)})
             return CommandResult(command, Status.SUCCESS, data=pages[log]())
 
-        # raw_nvme / raw_scsi are deliberately unsupported on mock for now.
+        # raw_nvme / raw_scsi are deliberately unsupported on mock.
         return CommandResult(command, Status.UNSUPPORTED,
                              raw_status={"reason": f"op '{op.value}' not supported by mock"})

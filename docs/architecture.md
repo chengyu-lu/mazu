@@ -39,9 +39,9 @@ LLM 產生的 IR 與人手寫的 IR 走完全相同的驗證路徑。
 
 ### I4. 執行必須抽象在 Executor 介面之後
 
-裝置執行被封在一個窄介面之後(現行程式碼中為 `transport/base.py` 的
-`Transport` ABC:`open / close / execute(LogicalCommand) → CommandResult`)。
-core 只認這個介面,不 import 任何具體實作;流程引擎(`core/executor.py`)
+裝置執行被封在一個窄介面之後(`executor/base.py` 的 `Executor` ABC:
+`open / close / execute(LogicalCommand) → CommandResult`)。
+core 只認這個介面,不 import 任何具體實作;流程引擎(`core/engine.py`)
 是確定性的:同一份 IR + 同一個裝置狀態 ⇒ 同一串指令序列,
 無隨機性、無隱式重試、無 LLM 呼叫。重試/逾時若有需要,宣告在 IR 裡。
 
@@ -84,10 +84,10 @@ v2 引入破壞性指令時,採雙重閘門:flow 層級明確 `allow_destructive
  Validator                    ← I3:強制閘門(結構/語意/政策)
      │
      ▼
- Flow 引擎(確定性)           ← I4:core/executor.py
+ Flow 引擎(確定性)           ← I4:core/engine.py
      │  LogicalCommand
      ▼
- Executor 介面(Transport ABC) ← I4/I5:唯一通往裝置的門
+ Executor 介面(Executor ABC)  ← I4/I5:唯一通往裝置的門(executor/base.py)
      ├─ MockExecutor(✅ 現行,spec-shaped payload)
      ├─ NvmeExecutor(Phase 2:Linux ioctl passthru)
      ├─ ScsiExecutor(Phase 2:SG_IO;USB BOT/UAS 隨之支援)
@@ -101,7 +101,7 @@ v2 引入破壞性指令時,採雙重閘門:flow 層級明確 `allow_destructive
  Analyzer / Report            ← 結論必附證據(指令、狀態、raw bytes、期望/實際值)
 ```
 
-依賴方向:`cli → core → transport(executor) → translate`;
+依賴方向:`cli → core → executor → translate`;
 `decode`/`analyze` 只依賴 `core` 的資料模型。executor 實作永不 import 上層。
 
 ## 4. 為什麼 Flow IR 是合約

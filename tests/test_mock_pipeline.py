@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from mazu.core.executor import FlowExecutionError, run_flow
+from mazu.core.engine import FlowExecutionError, run_flow
 from mazu.core.flow import load_flow, parse_flow
-from mazu.transport.mock.transport import MockTransport
+from mazu.executor.mock.executor import MockExecutor
 
 EXAMPLES = Path(__file__).parent.parent / "examples" / "flows"
 
 
 def test_identify_and_smart_example_passes():
     flow = load_flow(EXAMPLES / "identify_and_smart.yaml")
-    result = run_flow(flow, MockTransport())
+    result = run_flow(flow, MockExecutor())
     assert result.passed, "\n".join(
         str(a) for s in result.step_results for a in s.assertion_results
     )
@@ -23,7 +23,7 @@ def test_identify_and_smart_example_passes():
 
 def test_read_and_firmware_example_passes():
     flow = load_flow(EXAMPLES / "read_and_firmware.yaml")
-    result = run_flow(flow, MockTransport())
+    result = run_flow(flow, MockExecutor())
     assert result.passed
 
 
@@ -35,7 +35,7 @@ def test_destructive_flow_refused_before_touching_device():
         "steps": [{"op": "write", "params": {"lba": 0, "blocks": 1}}],
     })
     with pytest.raises(FlowExecutionError, match="validation"):
-        run_flow(flow, MockTransport())
+        run_flow(flow, MockExecutor())
 
 
 def test_out_of_range_read_reports_error_status():
@@ -43,7 +43,7 @@ def test_out_of_range_read_reports_error_status():
         "version": 1, "name": "oob",
         "steps": [{"op": "read", "params": {"lba": 10**9, "blocks": 1}}],
     })
-    result = run_flow(flow, MockTransport())
+    result = run_flow(flow, MockExecutor())
     assert not result.passed
     step = result.step_results[0]
     assert step.command_result.status.value == "error"
@@ -58,5 +58,5 @@ def test_failed_assertion_fails_flow():
             "assert": [{"path": "smart.power_cycles", "op": "eq", "value": 0}],
         }],
     })
-    result = run_flow(flow, MockTransport())
+    result = run_flow(flow, MockExecutor())
     assert not result.passed  # mock reports 42 power cycles

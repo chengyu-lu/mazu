@@ -1,4 +1,10 @@
-"""Serializable execution results, consumed by analyze/ and reporting."""
+"""Serializable execution results, consumed by analyze/ and reporting.
+
+Invariant I2: results serialize losslessly — including raw payloads and
+raw device status — so a result file is complete, self-contained evidence
+(invariant: every analysis conclusion cites evidence) and analysis can
+happen offline, without a live device.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +43,7 @@ class StepResult:
 @dataclass
 class FlowResult:
     flow_name: str
-    transport: str
+    executor: str
     step_results: list[StepResult] = field(default_factory=list)
 
     @property
@@ -45,17 +51,24 @@ class FlowResult:
         return all(s.passed for s in self.step_results)
 
     def to_dict(self) -> dict[str, Any]:
-        """Plain-data view for JSON reports."""
+        """Plain-data view for JSON reports.
+
+        Raw bytes are preserved as hex (evidence must never be dropped
+        mid-pipeline); raw device status is carried verbatim.
+        """
         return {
             "flow": self.flow_name,
-            "transport": self.transport,
+            "executor": self.executor,
             "passed": self.passed,
             "steps": [
                 {
                     "index": s.index,
                     "name": s.name,
                     "op": s.command_result.command.op.value,
+                    "params": s.command_result.command.params,
                     "status": s.command_result.status.value,
+                    "raw_status": s.command_result.raw_status,
+                    "data_hex": s.command_result.data.hex(),
                     "passed": s.passed,
                     "decoded": s.command_result.decoded,
                     "assertions": [

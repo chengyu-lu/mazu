@@ -1,7 +1,7 @@
 """Logical command model — the transport-agnostic command abstraction.
 
 A flow never talks about NVMe opcodes or SCSI CDBs directly. It talks about
-*logical operations* (identify_controller, read, get_log, ...). Each transport
+*logical operations* (identify_controller, read, get_log, ...). Each executor
 backend maps a LogicalCommand onto its own wire format. This is the layer that
 makes NVMe/SCSI/USB/USB4 interchangeable for the same flow.
 """
@@ -28,11 +28,13 @@ class Op(str, Enum):
     RAW_SCSI = "raw_scsi"
 
 
-#: Ops that can modify media or device state. The validator refuses these
-#: unless the flow explicitly sets `allow_destructive: true`.
+#: Ops that can modify media or device state. Out of scope in v1
+#: (invariant I7): the validator rejects these unconditionally. In v2 they
+#: come back behind a double gate (flow-level `allow_destructive` AND an
+#: executor-level read-only release).
 DESTRUCTIVE_OPS = {Op.WRITE, Op.RAW_NVME, Op.RAW_SCSI}
 
-#: Logical log page names -> NVMe log page IDs (transport backends may
+#: Logical log page names -> NVMe log page IDs (executor backends may
 #: translate these differently, e.g. SCSI LOG SENSE pages).
 LOG_PAGES = {
     "error": 0x01,
@@ -60,7 +62,7 @@ class Status(str, Enum):
 
     SUCCESS = "success"
     ERROR = "error"           # device returned an error status
-    UNSUPPORTED = "unsupported"  # transport cannot express this command
+    UNSUPPORTED = "unsupported"  # executor cannot express this command
     TRANSPORT_ERROR = "transport_error"  # link/ioctl level failure
 
 

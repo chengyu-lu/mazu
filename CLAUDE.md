@@ -35,7 +35,7 @@ Mazu — 專為 SSD / USB / USB4 控制器韌體工程師設計的儲存驗證�
    設定任何一道閘門。**
 
 4. **LLM 絕對不可直接存取儲存裝置。**
-   LLM 的唯一輸出是 Flow IR(YAML)。`core/executor.py`、`transport/`、
+   LLM 的唯一輸出是 Flow IR(YAML)。`core/engine.py`、`executor/`、
    `translate/` 內不可出現任何 LLM 呼叫;LLM 產生的 IR 與人寫的 IR
    走完全相同的 validator,沒有捷徑。你在開發或除錯時也一樣:
    不可繞過 executor 直接對裝置節點下指令「試試看」。
@@ -80,7 +80,7 @@ Mazu — 專為 SSD / USB / USB4 控制器韌體工程師設計的儲存驗證�
     Controller Data Structure, offset 4-23: SN`)。查不到出處的欄位
     一律不實作——回 `Status.UNSUPPORTED` 或丟 `TranslationUnsupported`,
     絕不用「合理猜測」補位。這條也適用於 mock 裝置:
-    `transport/mock/device.py` 產出的 payload 必須符合 spec offset,
+    `executor/mock/device.py` 產出的 payload 必須符合 spec offset,
     decoder 對 mock 與真實裝置不做任何區分。
 
 ## 常用指令
@@ -90,35 +90,36 @@ pip install -e ".[dev]"                                # 安裝(開發模式)
 pytest                                                 # mock 測試(必須全綠才能 commit)
 pytest -m hw                                           # 實機測試(Phase 2 起,需硬體)
 mazu validate examples/flows/identify_and_smart.yaml   # 只驗證流程
-mazu run examples/flows/identify_and_smart.yaml        # 在 mock 裝置上執行
-mazu run <flow.yaml> --json                            # JSON 報告輸出
+mazu run examples/flows/identify_and_smart.yaml        # 在 MockExecutor 上執行
+mazu run <flow.yaml> -e mock --json                    # 選 executor、JSON 報告
 ```
 
 ## 架構與依賴方向
 
 ```
 src/mazu/
-├── core/       # command.py(LogicalCommand/Op/Status)、flow.py(IR 解析)、
-│               # validate.py(語意驗證)、executor.py(確定性執行)、result.py
-├── transport/  # base.py(Transport ABC)、mock/(可用)、
+├── core/       # command.py(LogicalCommand/Op/Status)、flow.py(IR 解析
+│               # 與序列化)、validate.py(語意驗證)、engine.py(確定性
+│               # flow 引擎)、result.py(含 raw 證據的可序列化結果)
+├── executor/   # base.py(Executor ABC = 唯一通往裝置的門)、mock/(可用)、
 │               # nvme.py / scsi.py / usb4.py(Phase 2/3 stub,勿刪介面說明)
 ├── translate/  # base.py(Translator ABC)、sntl.py(LOGICAL_MAPPING = 語意真相)
-├── decode/     # bytes → 結構化 dict;以邏輯 op 為 key,不以 transport 為 key
+├── decode/     # bytes → 結構化 dict;以邏輯 op 為 key,不以 executor 為 key
 ├── analyze/    # report.py(text/JSON 報告,從結構化資料生成)
 └── cli.py      # mazu validate / run
 ```
 
-依賴方向:`cli → core → transport → translate`;`decode`/`analyze` 只依賴
-`core` 的資料模型。**transport 永遠不 import 上層**;core 只認
-`transport/base.py` 的 `Transport` ABC,不 import 任何具體 transport。
-Transport 對無法表達的指令回 `Status.UNSUPPORTED`,絕不默默替換。
+依賴方向:`cli → core → executor → translate`;`decode`/`analyze` 只依賴
+`core` 的資料模型。**executor 實作永遠不 import 上層**;core 只認
+`executor/base.py` 的 `Executor` ABC,不 import 任何具體 executor。
+Executor 對無法表達的指令回 `Status.UNSUPPORTED`,絕不默默替換。
 
 ## 開發階段(照順序,不跳段)
 
 - **Phase 1(完成)**:mock-first pipeline 全通。
-- **Phase 2(下一步)**:`NvmeTransport`(Linux `NVME_IOCTL_ADMIN_CMD`/`IO_CMD`)、
-  `ScsiTransport`(SG_IO)。做完 SCSI,USB BOT/UAS 自動支援。
-  需加:裝置列舉(sysfs)、transport 層唯讀預設、`tests/hw/` 基礎建設。
+- **Phase 2(下一步)**:`NvmeExecutor`(Linux `NVME_IOCTL_ADMIN_CMD`/`IO_CMD`)、
+  `ScsiExecutor`(SG_IO)。做完 SCSI,USB BOT/UAS 自動支援。
+  需加:裝置列舉(sysfs)、executor 層唯讀預設、`tests/hw/` 基礎建設。
 - **Phase 3**:USB4 隧道偵測、補齊 `sntl.py` 的 wire-level 映射
   (只翻有明確 spec 對應的子集)。
 - **Phase 4**:NL → Flow IR(LLM frontend)、廠商指令 plugin 機制。
@@ -133,10 +134,10 @@ Transport 對無法表達的指令回 `Status.UNSUPPORTED`,絕不默默替換。
 2. `translate/sntl.py`:在 `LOGICAL_MAPPING` 定義它在 NVMe 與 SCSI 上的
    語意映射(含 spec 出處);某協議無對應就明確標 UNSUPPORTED。
 3. `core/validate.py`:參數驗證(必要參數、範圍、危險性)。
-4. 各 transport 的 dispatch(mock 先行,payload 依 spec offset)。
+4. 各 executor 的 dispatch(mock 先行,payload 依 spec offset)。
 5. 需要時加 decoder(`decode/`,回傳 snake_case 巢狀 dict)。
 6. 測試:codec roundtrip 測試 + validator 測試 + mock pipeline 測試。
-7. 範例 flow(`examples/flows/`,必須在 mock transport 上 PASS)。
+7. 範例 flow(`examples/flows/`,必須在 MockExecutor 上 PASS)。
 
 Commit 前:`pytest` 全綠 + 兩個 example flow `mazu run` 都 PASS。
 
@@ -147,4 +148,4 @@ Commit 前:`pytest` 全綠 + 兩個 example flow `mazu run` 都 PASS。
 - wire format 相關的常數(offset、opcode、page ID)集中定義、
   註明 spec 出處,不散落在邏輯裡當 magic number。
 - 錯誤處理:裝置層級的拒絕(如 LBA 越界)是 `Status.ERROR` + raw_status,
-  不是 Python exception;exception 保留給程式錯誤與 transport 故障。
+  不是 Python exception;exception 保留給程式錯誤與鏈路/OS 層故障(ExecutorError)。

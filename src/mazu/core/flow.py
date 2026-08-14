@@ -128,3 +128,35 @@ def load_flow(path: str | Path) -> Flow:
     with open(path, "r", encoding="utf-8") as f:
         doc = yaml.safe_load(f)
     return parse_flow(doc)
+
+
+def flow_to_dict(flow: Flow) -> dict[str, Any]:
+    """Serialize a Flow back to a plain dict (invariant I2).
+
+    Round-trip guarantee: parse_flow(flow_to_dict(f)) is semantically
+    identical to f. This is what makes flows storable, diffable and
+    replayable regardless of where they came from (human or LLM).
+    """
+    doc: dict[str, Any] = {"version": flow.version, "name": flow.name}
+    if flow.description:
+        doc["description"] = flow.description
+    if flow.allow_destructive:
+        doc["allow_destructive"] = True
+    steps: list[dict[str, Any]] = []
+    for step in flow.steps:
+        s: dict[str, Any] = {"op": step.command.op.value}
+        if step.name:
+            s["name"] = step.name
+        if step.command.params:
+            s["params"] = step.command.params
+        if step.expect_status != "success":
+            s["expect_status"] = step.expect_status
+        if step.assertions:
+            s["assert"] = [
+                {"path": a.path, "op": a.op}
+                | ({} if a.value is None else {"value": a.value})
+                for a in step.assertions
+            ]
+        steps.append(s)
+    doc["steps"] = steps
+    return doc

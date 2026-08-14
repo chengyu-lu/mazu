@@ -1,5 +1,5 @@
 from mazu.decode import decode_identify_controller, decode_smart_log
-from mazu.transport.mock.device import MockNvmeDevice
+from mazu.executor.mock.device import MockNvmeDevice
 
 
 def test_identify_controller_roundtrip():

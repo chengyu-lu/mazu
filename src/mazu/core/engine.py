@@ -1,7 +1,11 @@
-"""Flow executor: runs a validated Flow against a Transport.
+"""Deterministic flow engine: runs a validated Flow against an Executor.
 
-The executor never talks to hardware directly — it only sees the Transport
-interface. It decodes results (via decode/) and evaluates assertions.
+Invariants enforced here:
+- I3: validation is built into run_flow — there is no API that skips it.
+- I4: the engine only sees the Executor interface, never a concrete
+  implementation; same IR + same device state => same command sequence.
+  No randomness, no implicit retries, no LLM calls. Retries/timeouts, if
+  ever needed, must be declared in the IR.
 """
 
 from __future__ import annotations
@@ -9,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..decode import decode_result
-from ..transport.base import Transport
+from ..executor.base import Executor
 from .flow import Assertion, Flow
 from .result import AssertionResult, FlowResult, StepResult
 from .validate import validate_flow
@@ -51,18 +55,21 @@ def _eval_assertion(a: Assertion, decoded: dict | None) -> AssertionResult:
     return AssertionResult(a.path, a.op, a.value, actual, passed=passed)
 
 
-def run_flow(flow: Flow, transport: Transport, *, skip_validation: bool = False) -> FlowResult:
-    """Validate then execute a flow on the given transport."""
-    if not skip_validation:
-        report = validate_flow(flow)
-        if not report.ok:
-            msgs = "\n".join(str(i) for i in report.issues)
-            raise FlowExecutionError(f"flow failed validation:\n{msgs}")
+def run_flow(flow: Flow, executor: Executor) -> FlowResult:
+    """Validate then execute a flow on the given executor.
 
-    result = FlowResult(flow_name=flow.name, transport=transport.name)
-    with transport:
+    Validation is mandatory (invariant I3): an invalid flow raises before
+    any command reaches the executor.
+    """
+    report = validate_flow(flow)
+    if not report.ok:
+        msgs = "\n".join(str(i) for i in report.issues)
+        raise FlowExecutionError(f"flow failed validation:\n{msgs}")
+
+    result = FlowResult(flow_name=flow.name, executor=executor.name)
+    with executor:
         for idx, step in enumerate(flow.steps):
-            cmd_result = transport.execute(step.command)
+            cmd_result = executor.execute(step.command)
             cmd_result.decoded = decode_result(cmd_result)
 
             step_result = StepResult(

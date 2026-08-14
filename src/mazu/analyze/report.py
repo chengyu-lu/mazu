@@ -1,4 +1,10 @@
-"""Human-readable and JSON reporting for flow results."""
+"""Human-readable and JSON reporting for flow results.
+
+Reports are the terminal presentation layer: always generated from the
+structured FlowResult, never the other way around. Every verdict shown
+here is traceable to evidence (command, status, raw payload, expected vs
+actual values) carried on the result object.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +16,7 @@ from ..core.result import FlowResult
 def text_report(result: FlowResult) -> str:
     lines = [
         f"Flow: {result.flow_name}",
-        f"Transport: {result.transport}",
+        f"Executor: {result.executor}",
         f"Overall: {'PASS' if result.passed else 'FAIL'}",
         "-" * 60,
     ]

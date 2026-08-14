@@ -1,4 +1,4 @@
-"""Linux SCSI transport (Phase 2 — not yet implemented).
+"""Linux SCSI executor (Phase 2 — not yet implemented).
 
 Will issue CDBs via SG_IO on /dev/sgX or /dev/sdX. Once this lands, USB
 BOT/UAS devices are supported automatically — they are SCSI devices from
@@ -8,16 +8,16 @@ the host's point of view.
 from __future__ import annotations
 
 from ..core.command import CommandResult, LogicalCommand
-from .base import Transport
+from .base import Executor
 
 
-class ScsiTransport(Transport):
+class ScsiExecutor(Executor):
     name = "scsi"
 
     def __init__(self, device_path: str):
         self.device_path = device_path
         raise NotImplementedError(
-            "ScsiTransport (SG_IO) is planned for Phase 2. Use MockTransport for now."
+            "ScsiExecutor (SG_IO) is planned for Phase 2. Use MockExecutor for now."
         )
 
     def open(self) -> None:  # pragma: no cover
