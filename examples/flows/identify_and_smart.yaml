@@ -1,0 +1,29 @@
+# Example flow: identify the device and check its health.
+# Runs on any transport — the same file will work on real NVMe, SCSI,
+# USB or USB4 devices once those transports land.
+version: 1
+name: identify_and_smart
+description: Identify controller/namespace and verify basic SMART health.
+
+steps:
+  - name: identify controller
+    op: identify_controller
+    assert:
+      - { path: identify.model, op: exists }
+      - { path: identify.num_namespaces, op: ge, value: 1 }
+
+  - name: identify namespace 1
+    op: identify_namespace
+    params: { nsid: 1 }
+    assert:
+      - { path: namespace.lba_size, op: eq, value: 512 }
+      - { path: namespace.size_blocks, op: gt, value: 0 }
+
+  - name: check SMART health
+    op: get_log
+    params: { log: smart }
+    assert:
+      - { path: smart.critical_warning, op: eq, value: 0 }
+      - { path: smart.media_errors, op: eq, value: 0 }
+      - { path: smart.available_spare, op: ge, value: 10 }
+      - { path: smart.temperature_celsius, op: lt, value: 70 }
