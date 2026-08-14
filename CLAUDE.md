@@ -24,13 +24,15 @@ Mazu — 專為 SSD / USB / USB4 控制器韌體工程師設計的儲存驗證�
    無法明確定義,就明確標記為該協議 UNSUPPORTED,不留模糊地帶。
 
 3. **絕對不可在沒有明確確認的情況下執行破壞性指令。**
-   write / raw_nvme / raw_scsi 及未來任何會改變裝置狀態的指令
-   (format、sanitize、fw download…)都必須列入 `core/command.py` 的
-   `DESTRUCTIVE_OPS`,並且只有 flow 層級明確寫了
-   `allow_destructive: true` 才能通過驗證。
-   **AI agent(包括你)不可以為了讓流程跑過而代替使用者加上這個旗標。**
-   Phase 2 接真實裝置後,transport 另外預設唯讀模式,破壞性指令
-   需要 transport 層第二道明確允許(雙重確認,缺一不可)。
+   在 v1,這條的形式是最嚴格的:**破壞性指令完全不在範圍內**
+   (架構不變量 I7,見 `docs/architecture.md`)。write / raw_nvme /
+   raw_scsi 及未來任何會改變裝置狀態的指令(format、sanitize、
+   fw download…)都列入 `core/command.py` 的 `DESTRUCTIVE_OPS`,
+   v1 的 validator 對它們一律拒絕,任何旗標都不能放行。
+   v2 引入破壞性指令時採雙重閘門:flow 層級明確
+   `allow_destructive: true` **加上** executor 層級的唯讀預設解除,
+   缺一不可。**AI agent(包括你)不可以為了讓流程跑過而代替使用者
+   設定任何一道閘門。**
 
 4. **LLM 絕對不可直接存取儲存裝置。**
    LLM 的唯一輸出是 Flow IR(YAML)。`core/executor.py`、`transport/`、
@@ -126,7 +128,8 @@ Transport 對無法表達的指令回 `Status.UNSUPPORTED`,絕不默默替換。
 
 ## 新增一個邏輯指令的標準流程(缺一不可)
 
-1. `core/command.py`:加 Op;會改變裝置狀態就同時加入 `DESTRUCTIVE_OPS`。
+1. `core/command.py`:加 Op;會改變裝置狀態就同時加入 `DESTRUCTIVE_OPS`
+   (v1 的 validator 會因此一律拒絕它 — 這是預期行為,不是 bug)。
 2. `translate/sntl.py`:在 `LOGICAL_MAPPING` 定義它在 NVMe 與 SCSI 上的
    語意映射(含 spec 出處);某協議無對應就明確標 UNSUPPORTED。
 3. `core/validate.py`:參數驗證(必要參數、範圍、危險性)。

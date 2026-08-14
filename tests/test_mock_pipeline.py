@@ -21,17 +21,19 @@ def test_identify_and_smart_example_passes():
     assert ident["model"] == "MAZU VIRTUAL NVME SSD"
 
 
-def test_write_read_verify_example_passes():
-    flow = load_flow(EXAMPLES / "write_read_verify.yaml")
+def test_read_and_firmware_example_passes():
+    flow = load_flow(EXAMPLES / "read_and_firmware.yaml")
     result = run_flow(flow, MockTransport())
     assert result.passed
 
 
-def test_invalid_flow_refused_before_touching_device():
+def test_destructive_flow_refused_before_touching_device():
+    # Invariant I7: destructive ops never reach the executor in v1,
+    # even with allow_destructive set.
     flow = parse_flow({
-        "version": 1, "name": "bad",
+        "version": 1, "name": "bad", "allow_destructive": True,
         "steps": [{"op": "write", "params": {"lba": 0, "blocks": 1}}],
-    })  # destructive without allow_destructive
+    })
     with pytest.raises(FlowExecutionError, match="validation"):
         run_flow(flow, MockTransport())
 

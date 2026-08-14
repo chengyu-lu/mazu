@@ -1,0 +1,20 @@
+# Example flow: read-only sanity checks — LBA 0 content and firmware slots.
+# v1 flows are read-only by design (architecture invariant I7).
+version: 1
+name: read_and_firmware
+description: Read LBA 0 and inspect the firmware slot log (read-only).
+
+steps:
+  - name: read LBA 0
+    op: read
+    params: { lba: 0, blocks: 1 }
+    assert:
+      - { path: length, op: eq, value: 512 }
+      - { path: all_zero, op: exists }
+
+  - name: firmware slot log
+    op: get_log
+    params: { log: firmware_slot }
+    assert:
+      - { path: firmware_slot.active_slot, op: ge, value: 1 }
+      - { path: firmware_slot.slots.slot1, op: exists }

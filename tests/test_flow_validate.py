@@ -31,19 +31,27 @@ def test_read_requires_lba_and_blocks():
     assert any("blocks" in str(i) for i in report.issues)
 
 
-def test_write_blocked_without_allow_destructive():
+def test_write_rejected_in_v1():
     flow = make_flow([{"op": "write", "params": {"lba": 0, "blocks": 1}}])
     report = validate_flow(flow)
     assert not report.ok
-    assert any("allow_destructive" in i.message for i in report.issues)
+    assert any("out of scope in v1" in i.message for i in report.issues)
 
 
-def test_write_allowed_with_flag():
+def test_write_rejected_even_with_allow_destructive_flag():
+    # Invariant I7: no flag re-enables destructive ops in v1.
     flow = make_flow(
         [{"op": "write", "params": {"lba": 0, "blocks": 1, "pattern": 0xFF}}],
         allow_destructive=True,
     )
-    assert validate_flow(flow).ok
+    assert not validate_flow(flow).ok
+
+
+def test_raw_commands_rejected_in_v1():
+    for step in ({"op": "raw_nvme", "params": {"opcode": 6}},
+                 {"op": "raw_scsi", "params": {"cdb": "12"}}):
+        flow = make_flow([step], allow_destructive=True)
+        assert not validate_flow(flow).ok
 
 
 def test_unknown_log_page_rejected():

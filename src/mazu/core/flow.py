@@ -53,7 +53,10 @@ class Flow:
     steps: list[Step]
     version: int = FLOW_VERSION
     description: str = ""
-    #: Must be explicitly true for flows containing destructive ops.
+    #: Reserved for v2. In v1 destructive ops are rejected unconditionally
+    #: (invariant I7) and this flag has no effect. In v2 it becomes the
+    #: flow-level half of the double gate (the other half lives at the
+    #: executor: read-only by default).
     allow_destructive: bool = False
     #: Raw document, kept for error reporting / round-tripping.
     raw: dict[str, Any] = field(default_factory=dict)

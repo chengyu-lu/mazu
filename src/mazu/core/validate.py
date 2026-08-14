@@ -54,10 +54,15 @@ def _validate_step(report: ValidationReport, flow: Flow, idx: int, step: Step) -
     op = step.command.op
     params = step.command.params
 
-    if op in DESTRUCTIVE_OPS and not flow.allow_destructive:
+    if op in DESTRUCTIVE_OPS:
+        # Architectural invariant I7: the v1 command set is read-only.
+        # Destructive ops are rejected unconditionally — no flag overrides
+        # this. v2 will introduce them behind a double gate (flow-level
+        # allow_destructive AND executor-level read-only release).
         report.error(
             where,
-            "destructive/raw command requires 'allow_destructive: true' at flow level",
+            "destructive commands are out of scope in v1 (invariant I7); "
+            "'allow_destructive' has no effect until v2",
         )
 
     if op in (Op.READ, Op.WRITE):
